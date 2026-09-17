@@ -80,11 +80,16 @@ function load (env) {
 
     // delivery
     , notifiers: list(env.NOTIFIER, ['console'])
+    // Emoji force an SMS into UCS-2, halving the characters per billed
+    // segment. Opt in only if you want the arrows in your texts.
+    , smsUnicode: bool(env.SMS_UNICODE, false)
     , twilio: {
       accountSid: env.TWILIO_ACCOUNT_SID || ''
       , authToken: env.TWILIO_AUTH_TOKEN || ''
       , from: env.TWILIO_FROM || ''
       , to: env.TWILIO_TO || ''
+      // Overridable so the notifier can be tested against a local stub.
+      , apiBase: env.TWILIO_API_BASE || ''
     }
     , pushover: {
       token: env.PUSHOVER_TOKEN || ''

@@ -9,6 +9,8 @@
  *   node tools/backtest.js [days] [--verbose]
  */
 
+require('../src/dotenv').load();
+
 const config = require('../src/config');
 const detect = require('../src/detect');
 const state = require('../src/state');

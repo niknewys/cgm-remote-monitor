@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./dotenv').load();
+
 const config = require('./config');
 const detect = require('./detect');
 const format = require('./format');

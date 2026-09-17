@@ -16,7 +16,7 @@ stays exactly as it came from upstream.
 
 ```bash
 cd bg-rise-alert
-cp .env.example .env          # then edit it
+cp .env.example .env          # then fill in your Twilio details
 
 # See what it would do right now, without notifying anyone:
 node src/index.js --once --dry-run
@@ -37,20 +37,55 @@ node src/index.js
 
 A reminder reads:
 
-> **BG rising fast — take insulin?** ⬆️⬆️ 12.1 mmol/L, +1.0 per 5 min, up 3.4 over 18 min.
+```
+BG rising FAST - take insulin? 12.1 mmol/L, +0.9 per 5 min, up 3.4 over 18 min.
+```
+
+Text messages are deliberately plain ASCII. Any emoji or em dash forces an SMS
+into UCS-2 encoding, which cuts a billed segment from 160 characters to 70 — so
+a decorated message costs two SMS instead of one, every time. Pushover and
+webhook alerts have no such limit and keep the arrows (`⬆️⬆️ 12.1 mmol/L, ...`).
+Set `SMS_UNICODE=true` if you would rather have the arrows in your texts.
 
 ## Getting it to your phone
 
 Set `NOTIFIER` to one or more of `twilio`, `pushover`, `webhook`, `console`
 (comma separated — several at once is fine).
 
-**Real SMS — Twilio.** Sign up, buy a number, then set `TWILIO_ACCOUNT_SID`,
-`TWILIO_AUTH_TOKEN`, `TWILIO_FROM` and `TWILIO_TO`. Costs roughly a cent per
-message. This is the only option that is genuinely an SMS.
+**Real SMS — Twilio** (the configured default). Step by step:
+
+1. Create a Twilio account, then buy an SMS-capable number under
+   *Phone Numbers > Buy a number*. Buying a number in your own country is
+   usually cheapest and most reliable for delivery.
+2. Copy the **Account SID** and **Auth Token** from the console dashboard.
+3. Put all four values in `.env`:
+
+   ```bash
+   NOTIFIER=twilio
+   TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   TWILIO_AUTH_TOKEN=your-auth-token
+   TWILIO_FROM=+61212345678       # the Twilio number you bought
+   TWILIO_TO=+61412345678         # your mobile
+   ```
+
+   Both numbers must be **E.164**: a leading `+` and country code, no spaces
+   or dashes. An Australian mobile `0412 345 678` becomes `+61412345678`. The
+   format is checked at startup rather than the first time BG rises.
+4. `node src/index.js --test-alert` and wait for the text.
+
+Two things catch nearly everyone out the first time:
+
+- **Trial accounts can only text verified numbers.** Verify your mobile under
+  *Phone Numbers > Verified Caller IDs*, or upgrade the account.
+- **Geo permissions.** A new account may not be allowed to send to your
+  country. Enable it under *Messaging > Settings > Geo permissions*.
+
+Both come back as a clear error naming the setting to change, rather than a
+bare API code.
 
 **Push — Pushover.** A one-off app purchase and no per-message cost. Set
 `PUSHOVER_TOKEN` and `PUSHOVER_USER`. A rapid rise is sent at high priority so
-it cuts through a silent phone. Usually the better choice than SMS.
+it cuts through a silent phone. Cheaper than SMS if the volume bothers you.
 
 **Free SMS-ish — IFTTT.** Create a Webhooks applet, trigger event name of your
 choosing, action "send me an SMS" or a notification. Point `WEBHOOK_URL` at
@@ -158,14 +193,30 @@ the cooldown survives between runs):
 directory, set the environment variables, and run `npm start`. There is nothing
 to build and nothing to install.
 
+## What the SMS will cost
+
+The defaults fire about 7–8 times a day (see tuning above), and each alert is
+one SMS segment. So budget on the order of **220–240 messages a month**, plus
+whatever Twilio charges to rent the number. Multiply by your country's current
+per-message rate from Twilio's pricing page for the real figure.
+
+If that reads higher than you'd like, in order of effect: set `QUIET_HOURS`,
+raise `RISE_PER_5MIN` toward `0.9`–`1.0`, lengthen `COOLDOWN_MINS`, or set
+`ESCALATE_TO_RAPID=false` to drop the follow-up text when a rise accelerates.
+Re-run `tools/backtest.js` after each change to see the new rate before you
+commit to it.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-48 tests covering the trend fitting, every guard, the repeat-suppression rules,
-unit conversion in both mmol and mg/dL, and notifier configuration.
+63 tests covering the trend fitting, every guard, the repeat-suppression rules,
+unit conversion in both mmol and mg/dL, `.env` parsing, and the Twilio
+integration — the last of those run against a local stub of the Twilio API that
+asserts the exact request shape, auth header and message encoding, so the SMS
+path is verified without needing live credentials.
 
 ## A caveat worth stating
 

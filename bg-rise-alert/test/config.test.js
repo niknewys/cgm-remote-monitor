@@ -79,10 +79,11 @@ test('the alert reads as a usable SMS in both units', () => {
   };
 
   const mmol = format.formatAlert(result, { units: 'mmol', nightscoutUrl: 'https://ns.example.com' });
-  assert.match(mmol.sms, /rising fast/);
+  assert.match(mmol.sms, /rising FAST/);
   assert.match(mmol.sms, /12\.0 mmol\/L/);
   assert.match(mmol.sms, /\+1\.0 per 5 min/);
-  assert.ok(mmol.sms.length < 200, 'should stay short enough for a single SMS');
+  assert.strictEqual(mmol.segments.segments, 1, 'should bill as a single SMS segment');
+  assert.strictEqual(mmol.segments.encoding, 'GSM-7');
 
   const mgdl = format.formatAlert(result, { units: 'mgdl', nightscoutUrl: 'https://ns.example.com' });
   assert.match(mgdl.sms, /216 mg\/dL/);
@@ -115,7 +116,7 @@ test('notifiers report missing credentials instead of failing silently', () => {
 test('a fully configured twilio notifier validates', () => {
   const built = notify.build(config.load({
     NOTIFIER: 'twilio'
-    , TWILIO_ACCOUNT_SID: 'AC123', TWILIO_AUTH_TOKEN: 'secret'
+    , TWILIO_ACCOUNT_SID: 'AC' + 'a'.repeat(32), TWILIO_AUTH_TOKEN: 'secret'
     , TWILIO_FROM: '+15550001111', TWILIO_TO: '+15550002222'
   }), { units: 'mgdl' });
 
@@ -131,4 +132,47 @@ test('one failing notifier does not stop the others', async () => {
 
   assert.deepStrictEqual(outcomes.map(o => o.ok), [true, false]);
   assert.strictEqual(outcomes[1].error, 'boom');
+});
+
+test('.env is parsed without a dependency, and real env vars win', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dotenv = require('../src/dotenv');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bg-rise-env-'));
+  const file = path.join(dir, '.env');
+  fs.writeFileSync(file, [
+    '# a comment'
+    , ''
+    , 'NOTIFIER=twilio'
+    , 'export TWILIO_FROM=+61212345678'
+    , 'RISE_PER_5MIN=0.9   # trailing comment'
+    , 'QUIET_HOURS="23:00-07:00"'
+    , "PUSHOVER_SOUND='climb'"
+    , 'MALFORMED'
+  ].join('\n'));
+
+  const previous = process.env.NOTIFIER;
+  process.env.NOTIFIER = 'console'; // already set, must not be overwritten
+
+  try {
+    const parsed = dotenv.load(file);
+
+    assert.strictEqual(parsed.TWILIO_FROM, '+61212345678', 'export prefix is stripped');
+    assert.strictEqual(parsed.RISE_PER_5MIN, '0.9', 'inline comment is stripped');
+    assert.strictEqual(parsed.QUIET_HOURS, '23:00-07:00', 'quotes are stripped');
+    assert.strictEqual(parsed.PUSHOVER_SOUND, 'climb');
+    assert.ok(!('MALFORMED' in parsed), 'a line with no = is skipped');
+    assert.strictEqual(process.env.NOTIFIER, 'console', 'a real env var is not overwritten');
+    assert.strictEqual(process.env.TWILIO_FROM, '+61212345678', 'an unset var is filled in');
+  } finally {
+    if (previous === undefined) delete process.env.NOTIFIER; else process.env.NOTIFIER = previous;
+    delete process.env.TWILIO_FROM;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a missing .env is not an error', () => {
+  assert.deepStrictEqual(require('../src/dotenv').load('/nonexistent/path/.env'), {});
 });
