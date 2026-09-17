@@ -1,0 +1,23 @@
+{
+  "name": "bg-rise-alert",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Watches a Nightscout site and sends a phone reminder to take insulin when blood glucose starts rising.",
+  "license": "AGPL-3.0",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "bg-rise-alert": "src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "once": "node src/index.js --once",
+    "check": "node src/index.js --once --dry-run",
+    "test-alert": "node src/index.js --test-alert",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {}
+}
